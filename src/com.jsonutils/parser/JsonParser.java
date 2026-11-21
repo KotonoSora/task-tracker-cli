@@ -9,7 +9,7 @@ public class JsonParser {
     }
 
     private boolean hasNext() {
-        return this.index < json.length();
+        return this.index < this.json.length();
     }
 
     private void skipWhitespace() {
