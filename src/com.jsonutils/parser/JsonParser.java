@@ -13,13 +13,18 @@ public class JsonParser {
     }
 
     private void skipWhitespace() {
-        while (hasNext() && Character.isWhitespace(this.json.charAt(index))) {
-            this.index++;
+        while (hasNext()) {
+            char c = this.json.charAt(this.index);
+            if (c == 0x0020 || c == 0x0009 || c == 0x000A || c == 0x000D) {
+                this.index++;
+            } else {
+                break;
+            }
         }
     }
 
-    private Character consume() {
-        Character c;
+    private char consume() {
+        char c;
 
         if (hasNext()) {
             c = this.json.charAt(this.index);
@@ -31,12 +36,12 @@ public class JsonParser {
         return c;
     }
 
-    private void expect(Character args) {
-        Character c;
+    private void expect(char args) {
+        char c;
 
         if (hasNext()) {
             c = this.json.charAt(this.index);
-            if (c.equals(args)) {
+            if (c == args) {
                 this.index++;
             } else {
                 throw new IllegalStateException();
