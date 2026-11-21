@@ -1,6 +1,52 @@
 package parser;
 
 public class JsonParser {
+    private final String json;
+    private int index = 0;
+
+    public JsonParser(String json) {
+        this.json = json;
+    }
+
+    private boolean hasNext() {
+        return this.index < json.length();
+    }
+
+    private void skipWhitespace() {
+        while (hasNext() && Character.isWhitespace(this.json.charAt(index))) {
+            this.index++;
+        }
+    }
+
+    private Character consume() {
+        Character c;
+
+        if (hasNext()) {
+            c = this.json.charAt(this.index);
+            this.index++;
+        } else {
+            throw new IllegalStateException();
+        }
+
+        return c;
+    }
+
+    private void expect(Character args) {
+        Character c;
+
+        if (hasNext()) {
+            c = this.json.charAt(this.index);
+            if (c.equals(args)) {
+                this.index++;
+            } else {
+                throw new IllegalStateException();
+            }
+
+        } else {
+            throw new IllegalStateException();
+        }
+    }
+
     // TODO: parse function
     public String parse() {
         return "TODO: parse function";
@@ -24,15 +70,5 @@ public class JsonParser {
     // TODO: parseNumber function
     public String parseNumber() {
         return "TODO: parseNumber function";
-    }
-
-    // TODO: parseBoolean function
-    public String parseBoolean() {
-        return "TODO: parseBoolean function";
-    }
-
-    // TODO: parseNull function
-    public String parseNull() {
-        return "TODO: parseNull function";
     }
 }
