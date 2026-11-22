@@ -1,8 +1,10 @@
-
 package parser;
 
 import exception.JsonSyntaxException;
 import exception.JsonUnexpectedEndException;
+
+import lexer.JsonLexer;
+import token.JsonToken;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -12,390 +14,380 @@ import java.util.Map;
 
 public class JsonParser {
 
-    private final String json;
-    private int index = 0;
+    private static final int DEFAULT_MAX_DEPTH = 256;
+
+    private final JsonLexer lexer;
+    private final DuplicateKeyPolicy duplicateKeyPolicy;
+    private final int maxDepth;
+
+    private JsonToken current;
+    private int depth = 0;
+
+    // =====================================
+    // Constructors
+    // =====================================
 
     public JsonParser(String json) {
-        if (json == null) {
-            throw new IllegalArgumentException("JSON cannot be null");
+        this(
+                json,
+                DuplicateKeyPolicy.REJECT,
+                DEFAULT_MAX_DEPTH);
+    }
+
+    public JsonParser(
+            String json,
+            DuplicateKeyPolicy duplicateKeyPolicy) {
+        this(
+                json,
+                duplicateKeyPolicy,
+                DEFAULT_MAX_DEPTH);
+    }
+
+    public JsonParser(
+            String json,
+            DuplicateKeyPolicy duplicateKeyPolicy,
+            int maxDepth) {
+
+        if (duplicateKeyPolicy == null) {
+            throw new IllegalArgumentException(
+                    "Duplicate key policy cannot be null");
         }
 
-        this.json = json;
-    }
-
-    // ==============================
-    // Core methods
-    // ==============================
-
-    private boolean hasNext() {
-        return index < json.length();
-    }
-
-    private char peek() {
-        if (!hasNext()) {
-            throw unexpectedEnd("Unexpected end of JSON");
+        if (maxDepth < 1) {
+            throw new IllegalArgumentException(
+                    "Maximum depth must be greater than zero");
         }
 
-        return json.charAt(index);
+        this.lexer = new JsonLexer(json);
+        this.duplicateKeyPolicy = duplicateKeyPolicy;
+        this.maxDepth = maxDepth;
+
+        this.current = lexer.nextToken();
     }
 
-    private char consume() {
-        if (!hasNext()) {
-            throw unexpectedEnd("Unexpected end of JSON");
-        }
-
-        return json.charAt(index++);
-    }
-
-    private void expect(char expected) {
-        char actual = consume();
-
-        if (actual != expected) {
-            throw syntax(
-                    "Expected '" + expected + "' but found '" + actual + "'");
-        }
-    }
-
-    private void skipWhitespace() {
-        while (hasNext()) {
-            char c = peek();
-
-            if (c == ' ' || c == '\t' ||
-                    c == '\n' || c == '\r') {
-                index++;
-            } else {
-                break;
-            }
-        }
-    }
-
-    // ==============================
-    // Exception helpers
-    // ==============================
-
-    private JsonSyntaxException syntax(String message) {
-        return new JsonSyntaxException(message, index);
-    }
-
-    private JsonUnexpectedEndException unexpectedEnd(String message) {
-        return new JsonUnexpectedEndException(message, index);
-    }
-
-    // ==============================
+    // =====================================
     // Entry point
-    // ==============================
+    // =====================================
 
     public Object parse() {
-        skipWhitespace();
 
         Object result = parseValue();
 
-        skipWhitespace();
-
-        if (hasNext()) {
-            throw syntax("Unexpected character: '" + peek() + "'");
+        if (!current.is(JsonToken.Type.EOF)) {
+            throw syntax(
+                    "Unexpected token: " + current.type());
         }
 
         return result;
     }
 
-    // ==============================
+    // =====================================
     // Parse value
-    // ==============================
+    // =====================================
 
     private Object parseValue() {
-        skipWhitespace();
 
-        if (!hasNext()) {
-            throw unexpectedEnd("Expected JSON value");
-        }
+        return switch (current.type()) {
 
-        char c = peek();
+            case LEFT_BRACE -> parseObject();
 
-        return switch (c) {
-            case '{' -> parseObject();
-            case '[' -> parseArray();
-            case '"' -> parseString();
-            case 't' -> parseLiteral("true", Boolean.TRUE);
-            case 'f' -> parseLiteral("false", Boolean.FALSE);
-            case 'n' -> parseLiteral("null", null);
+            case LEFT_BRACKET -> parseArray();
 
-            default -> {
-                if (c == '-' || isDigit(c)) {
-                    yield parseNumber();
-                }
+            case STRING -> parseString();
 
-                throw syntax("Invalid JSON value");
-            }
+            case NUMBER -> parseNumber();
+
+            case TRUE -> parseBoolean(true);
+
+            case FALSE -> parseBoolean(false);
+
+            case NULL -> parseNull();
+
+            case EOF -> throw unexpectedEnd(
+                    "Expected JSON value");
+
+            default -> throw syntax(
+                    "Unexpected token: " + current.type());
         };
     }
 
-    // ==============================
+    // =====================================
     // Parse object
-    // ==============================
+    // =====================================
 
-    public Map<String, Object> parseObject() {
-        Map<String, Object> result = new LinkedHashMap<>();
+    private Map<String, Object> parseObject() {
 
-        expect('{');
-        skipWhitespace();
-
-        if (hasNext() && peek() == '}') {
-            index++;
-            return result;
-        }
-
-        while (true) {
-            skipWhitespace();
-
-            if (!hasNext()) {
-                throw unexpectedEnd("Expected object key");
-            }
-
-            if (peek() != '"') {
-                throw syntax("Object key must be a string");
-            }
-
-            String key = parseString();
-
-            skipWhitespace();
-            expect(':');
-
-            Object value = parseValue();
-
-            if (result.containsKey(key)) {
-                throw syntax("Duplicate object key: " + key);
-            }
-
-            result.put(key, value);
-
-            skipWhitespace();
-
-            char c = consume();
-
-            if (c == '}') {
-                break;
-            }
-
-            if (c != ',') {
-                throw syntax("Expected ',' or '}'");
-            }
-        }
-
-        return result;
-    }
-
-    // ==============================
-    // Parse array
-    // ==============================
-
-    public List<Object> parseArray() {
-        List<Object> result = new ArrayList<>();
-
-        expect('[');
-        skipWhitespace();
-
-        if (hasNext() && peek() == ']') {
-            index++;
-            return result;
-        }
-
-        while (true) {
-            result.add(parseValue());
-
-            skipWhitespace();
-
-            char c = consume();
-
-            if (c == ']') {
-                break;
-            }
-
-            if (c != ',') {
-                throw syntax("Expected ',' or ']'");
-            }
-        }
-
-        return result;
-    }
-
-    // ==============================
-    // Parse string
-    // ==============================
-
-    public String parseString() {
-        expect('"');
-
-        StringBuilder result = new StringBuilder();
-
-        while (hasNext()) {
-            char c = consume();
-
-            if (c == '"') {
-                return result.toString();
-            }
-
-            if (c < 0x20) {
-                throw syntax("Unescaped control character");
-            }
-
-            if (c != '\\') {
-                result.append(c);
-                continue;
-            }
-
-            char escaped = consume();
-
-            switch (escaped) {
-                case '"' -> result.append('"');
-                case '\\' -> result.append('\\');
-                case '/' -> result.append('/');
-                case 'b' -> result.append('\b');
-                case 'f' -> result.append('\f');
-                case 'n' -> result.append('\n');
-                case 'r' -> result.append('\r');
-                case 't' -> result.append('\t');
-
-                case 'u' -> {
-                    result.append((char) parseUnicode());
-                }
-
-                default -> throw syntax("Invalid escape sequence");
-            }
-        }
-
-        throw unexpectedEnd("Unterminated string");
-    }
-
-    // ==============================
-    // Parse Unicode
-    // ==============================
-
-    private int parseUnicode() {
-        int value = 0;
-
-        for (int i = 0; i < 4; i++) {
-            if (!hasNext()) {
-                throw unexpectedEnd("Incomplete Unicode escape");
-            }
-
-            char c = consume();
-
-            int digit = Character.digit(c, 16);
-
-            if (digit == -1) {
-                throw syntax("Invalid Unicode escape");
-            }
-
-            value = value * 16 + digit;
-        }
-
-        return value;
-    }
-
-    // ==============================
-    // Parse number
-    // ==============================
-
-    public Number parseNumber() {
-        int start = index;
-
-        if (hasNext() && peek() == '-') {
-            index++;
-        }
-
-        if (!hasNext()) {
-            throw unexpectedEnd("Incomplete number");
-        }
-
-        // Integer part
-
-        if (peek() == '0') {
-            index++;
-
-            if (hasNext() && isDigit(peek())) {
-                throw syntax("Leading zeros are not allowed");
-            }
-
-        } else if (isDigitOneToNine(peek())) {
-
-            while (hasNext() && isDigit(peek())) {
-                index++;
-            }
-
-        } else {
-            throw syntax("Invalid integer part");
-        }
-
-        // Fraction part
-
-        if (hasNext() && peek() == '.') {
-            index++;
-
-            if (!hasNext() || !isDigit(peek())) {
-                throw syntax("Invalid fraction");
-            }
-
-            while (hasNext() && isDigit(peek())) {
-                index++;
-            }
-        }
-
-        // Exponent part
-
-        if (hasNext() && (peek() == 'e' || peek() == 'E')) {
-            index++;
-
-            if (hasNext() && (peek() == '+' || peek() == '-')) {
-                index++;
-            }
-
-            if (!hasNext() || !isDigit(peek())) {
-                throw syntax("Invalid exponent");
-            }
-
-            while (hasNext() && isDigit(peek())) {
-                index++;
-            }
-        }
-
-        String value = json.substring(start, index);
+        enterContainer();
 
         try {
-            return new BigDecimal(value);
-        } catch (NumberFormatException e) {
-            throw syntax("Invalid number");
+
+            Map<String, Object> result = new LinkedHashMap<>();
+
+            expect(JsonToken.Type.LEFT_BRACE);
+
+            // Empty object
+
+            if (match(JsonToken.Type.RIGHT_BRACE)) {
+                return result;
+            }
+
+            while (true) {
+
+                // Object key
+
+                if (!current.is(JsonToken.Type.STRING)) {
+                    throw syntax(
+                            "Object key must be a string");
+                }
+
+                String key = current.value();
+
+                advance();
+
+                // Colon
+
+                expect(JsonToken.Type.COLON);
+
+                // Value
+
+                Object value = parseValue();
+
+                // Duplicate key handling
+
+                putObjectValue(result, key, value);
+
+                // End object
+
+                if (match(JsonToken.Type.RIGHT_BRACE)) {
+                    break;
+                }
+
+                // Separator
+
+                expect(JsonToken.Type.COMMA);
+
+                // Trailing comma
+
+                if (current.is(JsonToken.Type.RIGHT_BRACE)) {
+                    throw syntax(
+                            "Trailing comma is not allowed");
+                }
+            }
+
+            return result;
+
+        } finally {
+            exitContainer();
         }
     }
 
-    // ==============================
-    // Parse literal
-    // ==============================
+    // =====================================
+    // Parse array
+    // =====================================
 
-    private Object parseLiteral(String expected, Object value) {
-        for (int i = 0; i < expected.length(); i++) {
+    private List<Object> parseArray() {
 
-            if (!hasNext()) {
-                throw unexpectedEnd("Incomplete literal: " + expected);
+        enterContainer();
+
+        try {
+
+            List<Object> result = new ArrayList<>();
+
+            expect(JsonToken.Type.LEFT_BRACKET);
+
+            // Empty array
+
+            if (match(JsonToken.Type.RIGHT_BRACKET)) {
+                return result;
             }
 
-            if (consume() != expected.charAt(i)) {
-                throw syntax("Invalid literal: " + expected);
+            while (true) {
+
+                // Array element
+
+                result.add(parseValue());
+
+                // End array
+
+                if (match(JsonToken.Type.RIGHT_BRACKET)) {
+                    break;
+                }
+
+                // Separator
+
+                expect(JsonToken.Type.COMMA);
+
+                // Trailing comma
+
+                if (current.is(JsonToken.Type.RIGHT_BRACKET)) {
+                    throw syntax(
+                            "Trailing comma is not allowed");
+                }
             }
+
+            return result;
+
+        } finally {
+            exitContainer();
         }
+    }
+
+    // =====================================
+    // Duplicate key handling
+    // =====================================
+
+    private void putObjectValue(
+            Map<String, Object> object,
+            String key,
+            Object value) {
+
+        boolean duplicate = object.containsKey(key);
+
+        if (!duplicate) {
+            object.put(key, value);
+            return;
+        }
+
+        switch (duplicateKeyPolicy) {
+
+            case REJECT -> throw syntax(
+                    "Duplicate object key: " + key);
+
+            case KEEP_FIRST -> {
+                // Keep existing value
+            }
+
+            case KEEP_LAST -> object.put(key, value);
+        }
+    }
+
+    // =====================================
+    // Parse string
+    // =====================================
+
+    private String parseString() {
+
+        String value = current.value();
+
+        advance();
 
         return value;
     }
 
-    // ==============================
-    // Utility methods
-    // ==============================
+    // =====================================
+    // Parse number
+    // =====================================
 
-    private boolean isDigit(char c) {
-        return c >= '0' && c <= '9';
+    private Number parseNumber() {
+
+        String value = current.value();
+
+        advance();
+
+        try {
+
+            return new BigDecimal(value);
+
+        } catch (NumberFormatException e) {
+
+            throw syntax(
+                    "Invalid number: " + value);
+        }
     }
 
-    private boolean isDigitOneToNine(char c) {
-        return c >= '1' && c <= '9';
+    // =====================================
+    // Parse boolean
+    // =====================================
+
+    private Boolean parseBoolean(boolean value) {
+
+        advance();
+
+        return value;
+    }
+
+    // =====================================
+    // Parse null
+    // =====================================
+
+    private Object parseNull() {
+
+        advance();
+
+        return null;
+    }
+
+    // =====================================
+    // Depth management
+    // =====================================
+
+    private void enterContainer() {
+
+        if (depth >= maxDepth) {
+            throw syntax(
+                    "Maximum JSON nesting depth exceeded: " +
+                            maxDepth);
+        }
+
+        depth++;
+    }
+
+    private void exitContainer() {
+        depth--;
+    }
+
+    // =====================================
+    // Token operations
+    // =====================================
+
+    private void advance() {
+
+        current = lexer.nextToken();
+    }
+
+    private boolean match(JsonToken.Type expected) {
+
+        if (!current.is(expected)) {
+            return false;
+        }
+
+        advance();
+
+        return true;
+    }
+
+    private void expect(JsonToken.Type expected) {
+
+        if (current.is(JsonToken.Type.EOF)) {
+            throw unexpectedEnd(
+                    "Expected " + expected);
+        }
+
+        if (!current.is(expected)) {
+            throw syntax(
+                    "Expected " + expected +
+                            " but found " + current.type());
+        }
+
+        advance();
+    }
+
+    // =====================================
+    // Exception handling
+    // =====================================
+
+    private JsonSyntaxException syntax(String message) {
+
+        return new JsonSyntaxException(
+                message,
+                current.position());
+    }
+
+    private JsonUnexpectedEndException unexpectedEnd(
+            String message) {
+
+        return new JsonUnexpectedEndException(
+                message,
+                current.position());
     }
 }
