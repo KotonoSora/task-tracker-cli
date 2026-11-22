@@ -1,12 +1,12 @@
 package formatter;
 
+import exception.JsonFormatException;
+
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
 
 public class JsonFormatter {
-
-    private static final int DEFAULT_INDENT_SIZE = 4;
 
     private static final char OBJECT_OPEN = '{';
     private static final char OBJECT_CLOSE = '}';
@@ -20,24 +20,35 @@ public class JsonFormatter {
     private static final char COLON = ':';
     private static final char COMMA = ',';
 
-    private final int indentSize;
+    private final JsonFormatOptions options;
 
     // =====================================
     // Constructors
     // =====================================
 
     public JsonFormatter() {
-        this(DEFAULT_INDENT_SIZE);
+        this(JsonFormatOptions.defaults());
     }
 
     public JsonFormatter(int indentSize) {
+        this(
+                JsonFormatOptions.builder()
+                        .indentSize(indentSize)
+                        .build());
+    }
 
-        if (indentSize < 0) {
-            throw new IllegalArgumentException(
-                    "Indent size cannot be negative");
-        }
+    public JsonFormatter(JsonFormatOptions options) {
+        this.options = Objects.requireNonNull(
+                options,
+                "Format options cannot be null");
+    }
 
-        this.indentSize = indentSize;
+    // =====================================
+    // Get Options
+    // =====================================
+
+    public JsonFormatOptions getOptions() {
+        return options;
     }
 
     // =====================================
@@ -45,7 +56,23 @@ public class JsonFormatter {
     // =====================================
 
     public String format(String json) {
-        return prettyPrint(json);
+        return format(json, JsonFormatStyle.PRETTY);
+    }
+
+    public String format(
+            String json,
+            JsonFormatStyle style) {
+
+        Objects.requireNonNull(
+                style,
+                "Format style cannot be null");
+
+        return switch (style) {
+
+            case PRETTY -> prettyPrint(json);
+
+            case COMPACT -> minify(json);
+        };
     }
 
     // =====================================
@@ -69,8 +96,6 @@ public class JsonFormatter {
 
             char c = json.charAt(i);
 
-            // Inside JSON string
-
             if (inString) {
 
                 result.append(c);
@@ -92,8 +117,6 @@ public class JsonFormatter {
                 continue;
             }
 
-            // Start JSON string
-
             if (c == STRING_QUOTE) {
 
                 inString = true;
@@ -103,15 +126,11 @@ public class JsonFormatter {
                 continue;
             }
 
-            // Ignore whitespace outside strings
-
             if (isWhitespace(c)) {
                 continue;
             }
 
             switch (c) {
-
-                // Object and array opening
 
                 case OBJECT_OPEN, ARRAY_OPEN -> {
 
@@ -121,83 +140,97 @@ public class JsonFormatter {
 
                     if (isEmptyContainer(json, i)) {
 
-                        char closing = c == OBJECT_OPEN
-                                ? OBJECT_CLOSE
-                                : ARRAY_CLOSE;
-
-                        result.append(closing);
+                        result.append(
+                                getClosingCharacter(c));
 
                         stack.pop();
 
-                        i = findNextNonWhitespace(json, i + 1);
+                        i = findNextNonWhitespace(
+                                json,
+                                i + 1);
 
                     } else {
 
+                        if (c == ARRAY_OPEN
+                                && options.arrayStyle() == JsonFormatOptions.ArrayStyle.SINGLE_LINE) {
+
+                            continue;
+                        }
+
                         depth++;
 
-                        result.append('\n');
+                        appendNewLine(result);
 
                         result.append(indent(depth));
                     }
                 }
 
-                // Object and array closing
-
                 case OBJECT_CLOSE, ARRAY_CLOSE -> {
 
-                    validateClosing(stack, c);
+                    validateClosing(stack, c, i);
+
+                    char opening = stack.peek();
+
+                    boolean singleLineArray = opening == ARRAY_OPEN
+                            && options.arrayStyle() == JsonFormatOptions.ArrayStyle.SINGLE_LINE;
+
+                    stack.pop();
+
+                    if (singleLineArray) {
+
+                        result.append(c);
+
+                        continue;
+                    }
 
                     depth--;
 
                     if (!endsWithOpening(result)) {
 
-                        result.append('\n');
+                        appendNewLine(result);
 
                         result.append(indent(depth));
                     }
 
                     result.append(c);
-
-                    stack.pop();
                 }
-
-                // Comma
 
                 case COMMA -> {
 
-                    result.append(c);
+                    result.append(COMMA);
 
-                    result.append('\n');
+                    boolean singleLineArray = !stack.isEmpty()
+                            && stack.peek() == ARRAY_OPEN
+                            && options.arrayStyle() == JsonFormatOptions.ArrayStyle.SINGLE_LINE;
 
-                    result.append(indent(depth));
+                    if (singleLineArray) {
+
+                        if (options.spaceAfterComma()) {
+                            result.append(' ');
+                        }
+
+                    } else {
+
+                        appendNewLine(result);
+
+                        result.append(indent(depth));
+                    }
                 }
-
-                // Colon
 
                 case COLON -> {
 
-                    result.append(c);
+                    result.append(COLON);
 
-                    result.append(' ');
+                    if (options.spaceAfterColon()) {
+                        result.append(' ');
+                    }
                 }
-
-                // Other characters
 
                 default -> result.append(c);
             }
         }
 
-        // Validate final state
-
-        if (inString) {
-            throw new IllegalArgumentException(
-                    "Unterminated JSON string");
-        }
-
-        if (!stack.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Unclosed JSON container: " + stack.peek());
-        }
+        validateFinalState(inString, stack, json.length());
 
         return result.toString();
     }
@@ -221,8 +254,6 @@ public class JsonFormatter {
 
             char c = json.charAt(i);
 
-            // Preserve everything inside strings
-
             if (inString) {
 
                 result.append(c);
@@ -244,8 +275,6 @@ public class JsonFormatter {
                 continue;
             }
 
-            // Start string
-
             if (c == STRING_QUOTE) {
 
                 inString = true;
@@ -255,35 +284,28 @@ public class JsonFormatter {
                 continue;
             }
 
-            // Remove whitespace
-
             if (isWhitespace(c)) {
                 continue;
             }
-
-            // Track containers
 
             switch (c) {
 
                 case OBJECT_OPEN, ARRAY_OPEN ->
                     stack.push(c);
 
-                case OBJECT_CLOSE, ARRAY_CLOSE ->
-                    validateClosing(stack, c);
+                case OBJECT_CLOSE, ARRAY_CLOSE -> {
+                    validateClosing(stack, c, i);
+                    stack.pop();
+                }
 
                 default -> {
-                    // No operation
                 }
             }
 
             result.append(c);
-
-            if (c == OBJECT_CLOSE || c == ARRAY_CLOSE) {
-                stack.pop();
-            }
         }
 
-        validateFinalState(inString, stack);
+        validateFinalState(inString, stack, json.length());
 
         return result.toString();
     }
@@ -295,23 +317,25 @@ public class JsonFormatter {
     public String indent(int depth) {
 
         if (depth < 0) {
-            throw new IllegalArgumentException(
+            throw new JsonFormatException(
                     "Indent depth cannot be negative");
         }
 
-        int spaces;
-
         try {
-            spaces = Math.multiplyExact(
+
+            int size = Math.multiplyExact(
                     depth,
-                    indentSize);
+                    options.indentSize());
+
+            return options.indentCharacter().repeat(size);
+
         } catch (ArithmeticException e) {
-            throw new IllegalArgumentException(
+
+            throw new JsonFormatException(
                     "Indent depth is too large",
+                    -1,
                     e);
         }
-
-        return " ".repeat(spaces);
     }
 
     // =====================================
@@ -327,6 +351,8 @@ public class JsonFormatter {
         StringBuilder result = new StringBuilder();
 
         result.append(STRING_QUOTE);
+
+        UnicodePolicy policy = options.unicodePolicy();
 
         for (int i = 0; i < value.length(); i++) {
 
@@ -367,8 +393,21 @@ public class JsonFormatter {
                                 && Character.isLowSurrogate(
                                         value.charAt(i + 1))) {
 
-                            result.append(c);
-                            result.append(value.charAt(++i));
+                            char low = value.charAt(i + 1);
+
+                            if (policy == UnicodePolicy.ESCAPE_ALL
+                                    || policy == UnicodePolicy.ESCAPE_NON_ASCII) {
+
+                                appendUnicodeEscape(result, c);
+                                appendUnicodeEscape(result, low);
+
+                            } else {
+
+                                result.append(c);
+                                result.append(low);
+                            }
+
+                            i++;
 
                         } else {
 
@@ -376,6 +415,12 @@ public class JsonFormatter {
                         }
 
                     } else if (Character.isLowSurrogate(c)) {
+
+                        appendUnicodeEscape(result, c);
+
+                    } else if (policy == UnicodePolicy.ESCAPE_ALL
+                            || (policy == UnicodePolicy.ESCAPE_NON_ASCII
+                                    && c > 0x7F)) {
 
                         appendUnicodeEscape(result, c);
 
@@ -428,11 +473,24 @@ public class JsonFormatter {
 
         char current = json.charAt(position);
 
-        char expected = current == OBJECT_OPEN
-                ? OBJECT_CLOSE
-                : ARRAY_CLOSE;
+        return json.charAt(next) == getClosingCharacter(current);
+    }
 
-        return json.charAt(next) == expected;
+    // =====================================
+    // Closing Character
+    // =====================================
+
+    private char getClosingCharacter(char opening) {
+
+        return switch (opening) {
+
+            case OBJECT_OPEN -> OBJECT_CLOSE;
+
+            case ARRAY_OPEN -> ARRAY_CLOSE;
+
+            default -> throw new JsonFormatException(
+                    "Invalid opening character: " + opening);
+        };
     }
 
     // =====================================
@@ -460,12 +518,14 @@ public class JsonFormatter {
 
     private void validateClosing(
             Deque<Character> stack,
-            char closing) {
+            char closing,
+            int position) {
 
         if (stack.isEmpty()) {
 
-            throw new IllegalArgumentException(
-                    "Unexpected closing character: " + closing);
+            throw new JsonFormatException(
+                    "Unexpected closing character: " + closing,
+                    position);
         }
 
         char opening = stack.peek();
@@ -481,29 +541,33 @@ public class JsonFormatter {
 
         if (!valid) {
 
-            throw new IllegalArgumentException(
-                    "Mismatched JSON container: " + closing);
+            throw new JsonFormatException(
+                    "Mismatched JSON container: " + closing,
+                    position);
         }
     }
 
     // =====================================
-    // Result Validation
+    // Final State Validation
     // =====================================
 
     private void validateFinalState(
             boolean inString,
-            Deque<Character> stack) {
+            Deque<Character> stack,
+            int position) {
 
         if (inString) {
 
-            throw new IllegalArgumentException(
-                    "Unterminated JSON string");
+            throw new JsonFormatException(
+                    "Unterminated JSON string",
+                    position);
         }
 
         if (!stack.isEmpty()) {
 
-            throw new IllegalArgumentException(
-                    "Unclosed JSON container: " + stack.peek());
+            throw new JsonFormatException(
+                    "Unclosed JSON container: " + stack.peek(),
+                    position);
         }
     }
 
@@ -520,6 +584,14 @@ public class JsonFormatter {
         char last = result.charAt(result.length() - 1);
 
         return last == OBJECT_OPEN || last == ARRAY_OPEN;
+    }
+
+    // =====================================
+    // Line Separator
+    // =====================================
+
+    private void appendNewLine(StringBuilder result) {
+        result.append(options.lineSeparator());
     }
 
     // =====================================
@@ -542,13 +614,13 @@ public class JsonFormatter {
 
         if (json == null) {
 
-            throw new IllegalArgumentException(
+            throw new JsonFormatException(
                     "JSON input cannot be null");
         }
 
         if (json.isBlank()) {
 
-            throw new IllegalArgumentException(
+            throw new JsonFormatException(
                     "JSON input cannot be empty");
         }
     }
