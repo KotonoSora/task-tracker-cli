@@ -1,4 +1,3 @@
-
 package exception;
 
 public class JsonUnexpectedEndException extends JsonParserException {

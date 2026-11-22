@@ -1,4 +1,3 @@
-
 package exception;
 
 public class JsonSyntaxException extends JsonParserException {
