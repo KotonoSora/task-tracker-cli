@@ -6,12 +6,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import exception.JsonPathException;
+
 public final class JsonPathGetter {
 
     private final Object source;
 
     public JsonPathGetter(Object source) {
-        this.source = Objects.requireNonNull(source, "JSON source cannot be null");
+        this.source = Objects.requireNonNull(
+                source,
+                "JSON source cannot be null");
     }
 
     // ==============================
@@ -47,7 +51,13 @@ public final class JsonPathGetter {
             return null;
         }
 
-        return toBigDecimal(number).intValueExact();
+        try {
+            return toBigDecimal(number).intValueExact();
+        } catch (ArithmeticException exception) {
+            throw new JsonPathException(
+                    "Value cannot be converted to Integer at path: " + path,
+                    exception);
+        }
     }
 
     public Long getLong(String path) {
@@ -57,7 +67,13 @@ public final class JsonPathGetter {
             return null;
         }
 
-        return toBigDecimal(number).longValueExact();
+        try {
+            return toBigDecimal(number).longValueExact();
+        } catch (ArithmeticException exception) {
+            throw new JsonPathException(
+                    "Value cannot be converted to Long at path: " + path,
+                    exception);
+        }
     }
 
     public Boolean getBoolean(String path) {
@@ -85,7 +101,7 @@ public final class JsonPathGetter {
         if (value instanceof Map<?, ?> map) {
             for (Object key : map.keySet()) {
                 if (!(key instanceof String)) {
-                    throw new IllegalStateException(
+                    throw new JsonPathException(
                             "JSON object contains a non-string key");
                 }
             }
@@ -154,16 +170,27 @@ public final class JsonPathGetter {
     public BigInteger getBigInteger(String path) {
         Number number = getNumber(path);
 
-        return number == null
-                ? null
-                : toBigDecimal(number).toBigIntegerExact();
+        if (number == null) {
+            return null;
+        }
+
+        try {
+            return toBigDecimal(number).toBigIntegerExact();
+        } catch (ArithmeticException exception) {
+            throw new JsonPathException(
+                    "Value cannot be converted to BigInteger at path: " + path,
+                    exception);
+        }
     }
 
     // ==============================
     // DEFAULT VALUE
     // ==============================
 
-    public Object getOrDefault(String path, Object defaultValue) {
+    public Object getOrDefault(
+            String path,
+            Object defaultValue) {
+
         Object value = resolve(path);
 
         return value != null ? value : defaultValue;
@@ -172,6 +199,7 @@ public final class JsonPathGetter {
     public String getStringOrDefault(
             String path,
             String defaultValue) {
+
         String value = getString(path);
 
         return value != null ? value : defaultValue;
@@ -180,6 +208,7 @@ public final class JsonPathGetter {
     public Integer getIntegerOrDefault(
             String path,
             Integer defaultValue) {
+
         Integer value = getInteger(path);
 
         return value != null ? value : defaultValue;
@@ -193,7 +222,7 @@ public final class JsonPathGetter {
         try {
             resolve(path);
             return true;
-        } catch (IllegalArgumentException exception) {
+        } catch (JsonPathException exception) {
             return false;
         }
     }
@@ -221,21 +250,28 @@ public final class JsonPathGetter {
     }
 
     private Object resolve(String path) {
-        if (path == null || path.isBlank()) {
-            throw new IllegalArgumentException(
-                    "JSON path cannot be null or blank");
-        }
+        List<String> segments = JsonPathParser.parse(path);
 
         Object current = source;
 
-        for (String segment : path.split("\\.")) {
+        for (String segment : segments) {
             if (current instanceof Map<?, ?> map) {
+
+                if (!map.containsKey(segment)) {
+                    throw new JsonPathException(
+                            "Property not found: " + path);
+                }
+
                 current = map.get(segment);
+
             } else if (current instanceof List<?> list) {
+
                 int index = parseIndex(segment, list.size());
+
                 current = list.get(index);
+
             } else {
-                throw new IllegalArgumentException(
+                throw new JsonPathException(
                         "Cannot resolve segment '%s' in path '%s'"
                                 .formatted(segment, path));
             }
@@ -249,13 +285,14 @@ public final class JsonPathGetter {
             int index = Integer.parseInt(segment);
 
             if (index < 0 || index >= size) {
-                throw new IndexOutOfBoundsException(
+                throw new JsonPathException(
                         "Array index out of bounds: " + index);
             }
 
             return index;
+
         } catch (NumberFormatException exception) {
-            throw new IllegalArgumentException(
+            throw new JsonPathException(
                     "Invalid array index: " + segment,
                     exception);
         }
@@ -273,11 +310,12 @@ public final class JsonPathGetter {
         return new BigDecimal(number.toString());
     }
 
-    private IllegalArgumentException typeMismatch(
+    private JsonPathException typeMismatch(
             String path,
             String expected,
             Object actual) {
-        return new IllegalArgumentException(
+
+        return new JsonPathException(
                 "Invalid JSON type at path '%s'. Expected %s but got %s"
                         .formatted(
                                 path,
