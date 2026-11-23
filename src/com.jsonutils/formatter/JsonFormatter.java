@@ -1,10 +1,10 @@
 package formatter;
 
-import exception.JsonFormatException;
-
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
+
+import exception.JsonFormatException;
 
 public class JsonFormatter {
 
