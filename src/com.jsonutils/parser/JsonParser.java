@@ -1,14 +1,12 @@
 package parser;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
+import array.JsonArray;
 import exception.JsonSyntaxException;
 import exception.JsonUnexpectedEndException;
 import lexer.JsonLexer;
+import object.JsonObject;
 import token.JsonToken;
 
 public class JsonParser {
@@ -68,6 +66,10 @@ public class JsonParser {
     // Entry point
     // =====================================
 
+    /**
+     * Returns a JsonObject, a JsonArray, a String, a Number (BigDecimal),
+     * a Boolean, or null.
+     */
     public Object parse() {
 
         Object result = parseValue();
@@ -114,13 +116,13 @@ public class JsonParser {
     // Parse object
     // =====================================
 
-    private Map<String, Object> parseObject() {
+    private JsonObject parseObject() {
 
         enterContainer();
 
         try {
 
-            Map<String, Object> result = new LinkedHashMap<>();
+            JsonObject result = new JsonObject();
 
             expect(JsonToken.Type.LEFT_BRACE);
 
@@ -184,13 +186,13 @@ public class JsonParser {
     // Parse array
     // =====================================
 
-    private List<Object> parseArray() {
+    private JsonArray parseArray() {
 
         enterContainer();
 
         try {
 
-            List<Object> result = new ArrayList<>();
+            JsonArray result = new JsonArray();
 
             expect(JsonToken.Type.LEFT_BRACKET);
 
@@ -236,13 +238,11 @@ public class JsonParser {
     // =====================================
 
     private void putObjectValue(
-            Map<String, Object> object,
+            JsonObject object,
             String key,
             Object value) {
 
-        boolean duplicate = object.containsKey(key);
-
-        if (!duplicate) {
+        if (!object.containsKey(key)) {
             object.put(key, value);
             return;
         }
