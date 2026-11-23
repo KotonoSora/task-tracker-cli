@@ -1,10 +1,5 @@
 package serializer;
 
-import formatter.JsonFormatter;
-import formatter.JsonFormatStyle;
-import object.JsonObject;
-import exception.JsonSerializationException;
-
 import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -13,6 +8,12 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+
+import array.JsonArray;
+import exception.JsonSerializationException;
+import formatter.JsonFormatStyle;
+import formatter.JsonFormatter;
+import object.JsonObject;
 
 public class JsonSerializer {
 
@@ -74,20 +75,45 @@ public class JsonSerializer {
         } else if (value instanceof JsonObject object) {
 
             checkCircularReference(object, visited);
-            serializerObject(object, output, visited);
-            visited.remove(object);
+
+            try {
+                serializerObject(object, output, visited);
+            } finally {
+                visited.remove(object);
+            }
+
+        } else if (value instanceof JsonArray jsonArray) {
+
+            checkCircularReference(jsonArray, visited);
+
+            try {
+                serializerArray(
+                        jsonArray.values(),
+                        output,
+                        visited);
+            } finally {
+                visited.remove(jsonArray);
+            }
 
         } else if (value instanceof Collection<?> collection) {
 
             checkCircularReference(collection, visited);
-            serializerArray(collection, output, visited);
-            visited.remove(collection);
+
+            try {
+                serializerArray(collection, output, visited);
+            } finally {
+                visited.remove(collection);
+            }
 
         } else if (value.getClass().isArray()) {
 
             checkCircularReference(value, visited);
-            serializerJavaArray(value, output, visited);
-            visited.remove(value);
+
+            try {
+                serializerJavaArray(value, output, visited);
+            } finally {
+                visited.remove(value);
+            }
 
         } else if (value instanceof String string) {
 

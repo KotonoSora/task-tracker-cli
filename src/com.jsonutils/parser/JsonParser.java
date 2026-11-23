@@ -1,16 +1,15 @@
 package parser;
 
-import exception.JsonSyntaxException;
-import exception.JsonUnexpectedEndException;
-
-import lexer.JsonLexer;
-import token.JsonToken;
-
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import exception.JsonSyntaxException;
+import exception.JsonUnexpectedEndException;
+import lexer.JsonLexer;
+import token.JsonToken;
 
 public class JsonParser {
 
