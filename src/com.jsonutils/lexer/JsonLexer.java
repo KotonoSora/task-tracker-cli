@@ -221,73 +221,50 @@ public class JsonLexer {
 
     private JsonToken scanNumber(int start) {
 
+        index = start;
+
         // Negative sign
-
-        if (source.charAt(start) == '-') {
-
+        if (peek() == '-') {
+            index++;
             if (!hasNext()) {
-                throw unexpectedEnd(
-                        "Incomplete number");
+                throw unexpectedEnd("Incomplete number");
             }
         }
 
         // Integer part
-
         if (peek() == '0') {
-
             index++;
-
             if (hasNext() && isDigit(peek())) {
-                throw syntax(
-                        "Leading zeros are not allowed");
+                throw syntax("Leading zeros are not allowed");
             }
-
         } else if (isDigitOneToNine(peek())) {
-
             while (hasNext() && isDigit(peek())) {
                 index++;
             }
-
         } else {
-
-            throw syntax(
-                    "Invalid integer part");
+            throw syntax("Invalid integer part");
         }
 
         // Fraction part
-
         if (hasNext() && peek() == '.') {
-
             index++;
-
             if (!hasNext() || !isDigit(peek())) {
-                throw syntax(
-                        "Invalid fraction");
+                throw syntax("Invalid fraction");
             }
-
             while (hasNext() && isDigit(peek())) {
                 index++;
             }
         }
 
         // Exponent part
-
-        if (hasNext() &&
-                (peek() == 'e' || peek() == 'E')) {
-
+        if (hasNext() && (peek() == 'e' || peek() == 'E')) {
             index++;
-
-            if (hasNext() &&
-                    (peek() == '+' || peek() == '-')) {
-
+            if (hasNext() && (peek() == '+' || peek() == '-')) {
                 index++;
             }
-
             if (!hasNext() || !isDigit(peek())) {
-                throw syntax(
-                        "Invalid exponent");
+                throw syntax("Invalid exponent");
             }
-
             while (hasNext() && isDigit(peek())) {
                 index++;
             }
