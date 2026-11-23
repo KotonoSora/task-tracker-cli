@@ -59,6 +59,10 @@ public class JsonSerializer {
         return formatter.format(output.toString(), style);
     }
 
+    // =====================================
+    // Serialize Value
+    // =====================================
+
     private void serializeValue(
             Object value,
             StringBuilder output,
