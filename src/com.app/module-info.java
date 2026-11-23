@@ -1,3 +1,3 @@
 module com.app {
-    requires com.greeting;
+    requires com.jsonutils;
 }
