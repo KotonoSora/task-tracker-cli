@@ -5,6 +5,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.UnaryOperator;
 
 import models.Task;
 import models.TaskStatus;
@@ -25,6 +26,11 @@ public final class TaskManager {
         return task;
     }
 
+    public Task update(int id, String description) {
+        String text = requireText(description);
+        return replace(id, t -> t.withDescription(text, now()));
+    }
+
     private static String now() {
         return LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS).format(FORMAT);
     }
@@ -38,6 +44,22 @@ public final class TaskManager {
             throw new IllegalArgumentException("Description cannot be blank");
         }
         return text.strip();
+    }
+
+    private Task replace(int id, UnaryOperator<Task> change) {
+        int index = indexOf(id);
+        Task updated = change.apply(tasks.get(index));
+        tasks.set(index, updated);
+        return updated;
+    }
+
+    private int indexOf(int id) {
+        for (int i = 0; i < tasks.size(); i++) {
+            if (tasks.get(i).id() == id) {
+                return i;
+            }
+        }
+        throw new IllegalArgumentException("Task not found with ID: " + id);
     }
 
 }
