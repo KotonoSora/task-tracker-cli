@@ -7,11 +7,11 @@ public record Task(
         String createdAt,
         String updatedAt) {
 
-    public Task withDescription(String description) {
-        return new Task(id, description, status, createdAt, updatedAt);
+    public Task withDescription(String description, String now) {
+        return new Task(id, description, status, createdAt, now);
     }
 
-    public Task withStatus(TaskStatus status) {
-        return new Task(id, description, status, createdAt, updatedAt);
+    public Task withStatus(TaskStatus status, String now) {
+        return new Task(id, description, status, createdAt, now);
     }
 }
