@@ -6,4 +6,4 @@ if [ ! -d "out" ]; then
     exit 1
 fi
 
-java --module-path out -m com.app/com.app.MainApp
+java --module-path out -m com.app/com.app.MainApp "$@"
