@@ -19,6 +19,10 @@ public final class TaskManager {
         this.tasks = new ArrayList<Task>(tasks);
     }
 
+    public List<Task> all() {
+        return List.copyOf(tasks);
+    }
+
     public Task add(String desription) {
         String now = now();
         Task task = new Task(nextId(), requireText(desription), TaskStatus.TODO, now, now);
