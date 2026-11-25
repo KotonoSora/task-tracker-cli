@@ -1,9 +1,9 @@
 #!/bin/bash
 
-cd "$(dirname "$0")/.." || exit
+cd "$(dirname "$0")/.." || exit 1
 
-if [ ! -d "out" ]; then
+if [ ! -f "dist/task-cli.jar" ]; then
     exit 1
 fi
 
-java --module-path out -m com.app/com.app.MainApp
+java -jar dist/task-cli.jar "$@"

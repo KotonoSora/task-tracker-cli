@@ -1,3 +1,4 @@
 module com.app {
-    requires com.greeting;
+    requires com.cli;
+    requires com.tasktracker;
 }
