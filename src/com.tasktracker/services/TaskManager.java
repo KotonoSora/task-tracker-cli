@@ -31,6 +31,10 @@ public final class TaskManager {
         return replace(id, t -> t.withDescription(text, now()));
     }
 
+    public Task mark(int id, TaskStatus status) {
+        return replace(id, t -> t.withStatus(status, now()));
+    }
+
     public Task delete(int id) {
         return tasks.remove(indexOf(id));
     }
