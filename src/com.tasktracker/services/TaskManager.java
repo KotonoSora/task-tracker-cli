@@ -23,6 +23,12 @@ public final class TaskManager {
         return List.copyOf(tasks);
     }
 
+    public List<Task> listWithStatus(TaskStatus status) {
+        return tasks.stream()
+                .filter(t -> t.status() == status)
+                .toList();
+    }
+
     public Task add(String desription) {
         String now = now();
         Task task = new Task(nextId(), requireText(desription), TaskStatus.TODO, now, now);
