@@ -31,6 +31,10 @@ public final class TaskManager {
         return replace(id, t -> t.withDescription(text, now()));
     }
 
+    public Task delete(int id) {
+        return tasks.remove(indexOf(id));
+    }
+
     private static String now() {
         return LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS).format(FORMAT);
     }
