@@ -1,3 +1,4 @@
 module com.app {
-    requires com.jsonutils;
+    requires com.cli;
+    requires com.tasktracker;
 }
